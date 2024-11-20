@@ -10,15 +10,19 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
-import java.util.regex.Pattern;
 
 public final class Surelyrules extends JavaPlugin {
+
+    private final Map<String, Map<String, Object>> cachedWorldConfigs = new ConcurrentHashMap<>();
+    private final Map<String, String> patternCache = new HashMap<>();
 
     @Override
     public void onEnable() {
         loadConfig();
+        cacheConfiguration();
         loadListeners();
         applyGameRulesToAllWorlds();
         getLogger().info("Surelyrules plugin enabled.");
@@ -30,12 +34,12 @@ public final class Surelyrules extends JavaPlugin {
     }
 
     private void loadConfig() {
-        getConfig().options().copyDefaults(true);
-        saveConfig();
+        saveDefaultConfig();
+        reloadConfig();
     }
 
     private void loadListeners() {
-        getServer().getPluginManager().registerEvents(new WorldLoadListener(), this);
+        getServer().getPluginManager().registerEvents(new WorldLoadListener(this), this);
     }
 
     public void applyGameRulesToAllWorlds() {
@@ -45,27 +49,14 @@ public final class Surelyrules extends JavaPlugin {
     }
 
     public void applyGameRulesToWorld(World world) {
-        FileConfiguration config = getConfig();
         String worldName = world.getName();
 
-        if (!config.contains("worlds")) {
-            getLogger().log(Level.WARNING, "No 'worlds' section in the configuration.");
-            return;
-        }
-
         boolean rulesApplied = false;
-        ConfigurationSection worldsSection = config.getConfigurationSection("worlds");
-        if (worldsSection == null) {
-            worldsSection = config.createSection("worlds");
-        }
-        for (String pattern : worldsSection.getKeys(false)) {
-            if (pattern.equals(worldName) || Pattern.matches(pattern, worldName)) {
-                ConfigurationSection worldSection = config.getConfigurationSection("worlds." + pattern);
-                if (worldSection == null) {
-                    getLogger().log(Level.WARNING, "No configuration section for world: " + worldName);
-                    continue;
-                }
-                Map<String, Object> gameRules = worldSection.getValues(false);
+        for (Map.Entry<String, Map<String, Object>> entry : cachedWorldConfigs.entrySet()) {
+            String pattern = entry.getKey();
+            Map<String, Object> gameRules = entry.getValue();
+
+            if (worldName.matches(patternCache.get(pattern))) {
                 rulesApplied = applyGameRulesFromConfig(world, gameRules) || rulesApplied;
             }
         }
@@ -95,12 +86,9 @@ public final class Surelyrules extends JavaPlugin {
                         case String s when gameRule.getType() == String.class ->
                                 world.setGameRule((GameRule<String>) gameRule, s);
                         case null, default -> {
-                            if(value == null) {
-                                getLogger().warning("Invalid value for game rule: " + ruleName + ". Value is null.");
-                            } else {
-                                getLogger().warning("Invalid value type for game rule: " + ruleName + ". Expected type: "
-                                        + gameRule.getType().getSimpleName() + ", but got: " + value.getClass().getSimpleName());
-                            }
+                            assert value != null;
+                            getLogger().warning("Invalid value type for game rule: " + ruleName + ". Expected: "
+                                    + gameRule.getType().getSimpleName() + ", but got: " + value.getClass().getSimpleName());
                             continue;
                         }
                     }
@@ -116,7 +104,25 @@ public final class Surelyrules extends JavaPlugin {
         return rulesApplied;
     }
 
+    private void cacheConfiguration() {
+        cachedWorldConfigs.clear();
+        patternCache.clear();
 
+        FileConfiguration config = getConfig();
+        ConfigurationSection worldsSection = config.getConfigurationSection("worlds");
+
+        if (worldsSection == null) {
+            worldsSection = config.createSection("worlds");
+        }
+
+        for (String pattern : worldsSection.getKeys(false)) {
+            ConfigurationSection worldSection = worldsSection.getConfigurationSection(pattern);
+            if (worldSection != null) {
+                cachedWorldConfigs.put(pattern, worldSection.getValues(false));
+                patternCache.put(pattern, convertWildcardToRegex(pattern));
+            }
+        }
+    }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
@@ -128,6 +134,7 @@ public final class Surelyrules extends JavaPlugin {
 
             if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
                 reloadConfig();
+                cacheConfiguration();
                 applyGameRulesToAllWorlds();
                 sender.sendMessage(ChatColor.GREEN + "Configuration reloaded and game rules applied.");
                 return true;
@@ -137,5 +144,26 @@ public final class Surelyrules extends JavaPlugin {
             return true;
         }
         return false;
+    }
+
+    private String convertWildcardToRegex(String wildcard) {
+        StringBuilder sb = new StringBuilder();
+        for (char c : wildcard.toCharArray()) {
+            switch (c) {
+                case '*':
+                    sb.append(".*");
+                    break;
+                case '?':
+                    sb.append(".");
+                    break;
+                default:
+                    if ("\\.[]{}()^$|/+".indexOf(c) >= 0) {
+                        sb.append("\\");
+                    }
+                    sb.append(c);
+                    break;
+            }
+        }
+        return sb.toString();
     }
 }

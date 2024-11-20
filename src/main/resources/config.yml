@@ -8,5 +8,6 @@ worlds:
     fallDamage: false
     keepInventory: true
     randomTickSpeed: 0
-  world_player_.*:
+  # wildcard support
+  'world_player_*':
     keepInventory: true
