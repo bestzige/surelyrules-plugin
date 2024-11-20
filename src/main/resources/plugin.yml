@@ -1,0 +1,10 @@
+name: surelyrules
+version: '1.0-SNAPSHOT'
+main: dev.bestzige.surelyrules.Surelyrules
+api-version: '1.21'
+author: BestZige
+commands:
+  surelyrules:
+    description: Show plugin information or reload the configuration
+    usage: /<command> [reload]
+    permission: surelyrules.admin

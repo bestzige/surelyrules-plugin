@@ -1,0 +1,12 @@
+###################################################
+##  https://minecraft.fandom.com/wiki/Game_rule  ##
+###################################################
+
+worlds:
+  hub:
+    doDaylightCycle: false
+    fallDamage: false
+    keepInventory: true
+    randomTickSpeed: 0
+  world_player_.*:
+    keepInventory: true
