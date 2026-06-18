@@ -3,6 +3,8 @@ package dev.bestzige.surelyrules;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.GameRule;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Registry;
 import org.bukkit.World;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -15,6 +17,32 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
 public final class Surelyrules extends JavaPlugin {
+
+    private static final Map<String, String> LEGACY_RULE_ALIASES;
+    private static final Set<String> INVERTED_LEGACY_RULES;
+
+    static {
+        Map<String, String> aliases = new HashMap<>();
+        aliases.put("announce_advancements", "show_advancement_messages");
+        aliases.put("do_daylight_cycle", "advance_time");
+        aliases.put("do_weather_cycle", "advance_weather");
+        aliases.put("do_mob_loot", "mob_drops");
+        aliases.put("do_mob_spawning", "spawn_mobs");
+        aliases.put("do_tile_drops", "block_drops");
+        aliases.put("do_entity_drops", "entity_drops");
+        aliases.put("do_fire_tick", "fire_spread_radius_around_player");
+        aliases.put("allow_fire_ticks_away_from_player", "fire_spread_radius_around_player");
+        aliases.put("natural_regeneration", "natural_health_regeneration");
+        aliases.put("disable_elytra_movement_check", "elytra_movement_check");
+        aliases.put("disable_raids", "raids");
+        aliases.put("disable_player_movement_check", "player_movement_check");
+        LEGACY_RULE_ALIASES = Map.copyOf(aliases);
+        INVERTED_LEGACY_RULES = Set.of(
+                "disable_elytra_movement_check",
+                "disable_raids",
+                "disable_player_movement_check"
+        );
+    }
 
     private final Map<String, Map<String, Object>> cachedWorldConfigs = new ConcurrentHashMap<>();
     private final Map<String, String> patternCache = new HashMap<>();
@@ -74,11 +102,13 @@ public final class Surelyrules extends JavaPlugin {
         for (Map.Entry<String, Object> entry : gameRules.entrySet()) {
             String ruleName = entry.getKey();
             Object value = entry.getValue();
-            GameRule<?> gameRule = GameRule.getByName(ruleName);
+            String normalizedRuleName = normalizeRuleName(ruleName);
+            Object effectiveValue = convertLegacyValue(normalizedRuleName, value);
+            GameRule<?> gameRule = resolveGameRule(normalizedRuleName);
 
             if (gameRule != null) {
                 try {
-                    switch (value) {
+                    switch (effectiveValue) {
                         case Boolean b when gameRule.getType() == Boolean.class ->
                                 world.setGameRule((GameRule<Boolean>) gameRule, b);
                         case Integer i when gameRule.getType() == Integer.class ->
@@ -86,15 +116,15 @@ public final class Surelyrules extends JavaPlugin {
                         case String s when gameRule.getType() == String.class ->
                                 world.setGameRule((GameRule<String>) gameRule, s);
                         case null, default -> {
-                            assert value != null;
+                            assert effectiveValue != null;
                             getLogger().warning("Invalid value type for game rule: " + ruleName + ". Expected: "
-                                    + gameRule.getType().getSimpleName() + ", but got: " + value.getClass().getSimpleName());
+                                    + gameRule.getType().getSimpleName() + ", but got: " + effectiveValue.getClass().getSimpleName());
                             continue;
                         }
                     }
                     rulesApplied = true;
                 } catch (Exception e) {
-                    getLogger().log(Level.SEVERE, "Error applying game rule: " + ruleName + " with value: " + value, e);
+                    getLogger().log(Level.SEVERE, "Error applying game rule: " + ruleName + " with value: " + effectiveValue, e);
                 }
             } else {
                 getLogger().warning("Invalid game rule: " + ruleName);
@@ -144,6 +174,39 @@ public final class Surelyrules extends JavaPlugin {
             return true;
         }
         return false;
+    }
+
+    private GameRule<?> resolveGameRule(String normalizedRuleName) {
+        String registryKey = LEGACY_RULE_ALIASES.getOrDefault(normalizedRuleName, normalizedRuleName);
+        return Registry.GAME_RULE.get(NamespacedKey.minecraft(registryKey));
+    }
+
+    private Object convertLegacyValue(String normalizedRuleName, Object value) {
+        if (value instanceof Boolean booleanValue) {
+            if (normalizedRuleName.equals("do_fire_tick")) {
+                return booleanValue ? 128 : 0;
+            }
+            if (INVERTED_LEGACY_RULES.contains(normalizedRuleName)) {
+                return !booleanValue;
+            }
+        }
+        return value;
+    }
+
+    private String normalizeRuleName(String ruleName) {
+        if (ruleName.contains("_")) {
+            return ruleName.toLowerCase(Locale.ROOT);
+        }
+
+        StringBuilder normalized = new StringBuilder();
+        for (int i = 0; i < ruleName.length(); i++) {
+            char c = ruleName.charAt(i);
+            if (Character.isUpperCase(c) && i > 0) {
+                normalized.append('_');
+            }
+            normalized.append(Character.toLowerCase(c));
+        }
+        return normalized.toString();
     }
 
     private String convertWildcardToRegex(String wildcard) {
