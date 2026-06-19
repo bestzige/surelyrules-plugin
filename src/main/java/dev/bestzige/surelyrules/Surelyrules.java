@@ -176,13 +176,7 @@ public final class Surelyrules extends JavaPlugin {
 
     private GameRule<?> resolveGameRule(String normalizedRuleName) {
         String registryKey = LEGACY_RULE_ALIASES.getOrDefault(normalizedRuleName, normalizedRuleName);
-
-        GameRule<?> fromRegistry = Registry.GAME_RULE.get(NamespacedKey.minecraft(registryKey));
-        if (fromRegistry != null) {
-            return fromRegistry;
-        }
-
-        return GameRule.getByName(registryKey);
+        return Registry.GAME_RULE.get(NamespacedKey.minecraft(registryKey));
     }
 
     private Object convertLegacyValue(String normalizedRuleName, Object value) {
