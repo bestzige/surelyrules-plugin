@@ -108,21 +108,19 @@ public final class Surelyrules extends JavaPlugin {
 
             if (gameRule != null) {
                 try {
-                    switch (effectiveValue) {
-                        case Boolean b when gameRule.getType() == Boolean.class ->
-                                world.setGameRule((GameRule<Boolean>) gameRule, b);
-                        case Integer i when gameRule.getType() == Integer.class ->
-                                world.setGameRule((GameRule<Integer>) gameRule, i);
-                        case String s when gameRule.getType() == String.class ->
-                                world.setGameRule((GameRule<String>) gameRule, s);
-                        case null, default -> {
-                            assert effectiveValue != null;
-                            getLogger().warning("Invalid value type for game rule: " + ruleName + ". Expected: "
-                                    + gameRule.getType().getSimpleName() + ", but got: " + effectiveValue.getClass().getSimpleName());
-                            continue;
-                        }
+                    if (effectiveValue instanceof Boolean b) {
+                        world.setGameRule((GameRule<Boolean>) gameRule, b);
+                        rulesApplied = true;
+                    } else if (effectiveValue instanceof Integer i) {
+                        world.setGameRule((GameRule<Integer>) gameRule, i);
+                        rulesApplied = true;
+                    } else if (effectiveValue instanceof String s) {
+                        world.setGameRule((GameRule<String>) gameRule, s);
+                        rulesApplied = true;
+                    } else {
+                        getLogger().warning("Invalid value type for game rule: " + ruleName + ". Got: "
+                                + (effectiveValue == null ? "null" : effectiveValue.getClass().getSimpleName()));
                     }
-                    rulesApplied = true;
                 } catch (Exception e) {
                     getLogger().log(Level.SEVERE, "Error applying game rule: " + ruleName + " with value: " + effectiveValue, e);
                 }
@@ -178,7 +176,13 @@ public final class Surelyrules extends JavaPlugin {
 
     private GameRule<?> resolveGameRule(String normalizedRuleName) {
         String registryKey = LEGACY_RULE_ALIASES.getOrDefault(normalizedRuleName, normalizedRuleName);
-        return Registry.GAME_RULE.get(NamespacedKey.minecraft(registryKey));
+
+        GameRule<?> fromRegistry = Registry.GAME_RULE.get(NamespacedKey.minecraft(registryKey));
+        if (fromRegistry != null) {
+            return fromRegistry;
+        }
+
+        return GameRule.getByName(registryKey);
     }
 
     private Object convertLegacyValue(String normalizedRuleName, Object value) {
