@@ -1,6 +1,7 @@
 ###################################################
 ##  https://minecraft.wiki/w/Game_rule           ##
 ##  1.21.11+ uses snake_case gamerule names     ##
+##  difficulty: peaceful, easy, normal, or hard ##
 ###################################################
 
 worlds:
@@ -9,6 +10,7 @@ worlds:
     show_death_messages: false
     random_tick_speed: 0
   'world':
+    difficulty: normal
     show_advancement_messages: false
     show_death_messages: false
     advance_time: false

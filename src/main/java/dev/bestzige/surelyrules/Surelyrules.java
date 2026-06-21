@@ -2,6 +2,7 @@ package dev.bestzige.surelyrules;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Difficulty;
 import org.bukkit.GameRule;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
@@ -82,10 +83,10 @@ public final class Surelyrules extends JavaPlugin {
         boolean rulesApplied = false;
         for (Map.Entry<String, Map<String, Object>> entry : cachedWorldConfigs.entrySet()) {
             String pattern = entry.getKey();
-            Map<String, Object> gameRules = entry.getValue();
+            Map<String, Object> worldSettings = entry.getValue();
 
             if (worldName.matches(patternCache.get(pattern))) {
-                rulesApplied = applyGameRulesFromConfig(world, gameRules) || rulesApplied;
+                rulesApplied = applyWorldSettingsFromConfig(world, worldSettings) || rulesApplied;
             }
         }
 
@@ -96,12 +97,18 @@ public final class Surelyrules extends JavaPlugin {
         }
     }
 
-    private boolean applyGameRulesFromConfig(World world, Map<String, Object> gameRules) {
+    private boolean applyWorldSettingsFromConfig(World world, Map<String, Object> worldSettings) {
         boolean rulesApplied = false;
 
-        for (Map.Entry<String, Object> entry : gameRules.entrySet()) {
+        for (Map.Entry<String, Object> entry : worldSettings.entrySet()) {
             String ruleName = entry.getKey();
             Object value = entry.getValue();
+
+            if (ruleName.equalsIgnoreCase("difficulty")) {
+                rulesApplied = applyDifficulty(world, value) || rulesApplied;
+                continue;
+            }
+
             String normalizedRuleName = normalizeRuleName(ruleName);
             Object effectiveValue = convertLegacyValue(normalizedRuleName, value);
             GameRule<?> gameRule = resolveGameRule(normalizedRuleName);
@@ -130,6 +137,24 @@ public final class Surelyrules extends JavaPlugin {
         }
 
         return rulesApplied;
+    }
+
+    private boolean applyDifficulty(World world, Object value) {
+        if (!(value instanceof String configuredDifficulty)) {
+            getLogger().warning("Invalid difficulty for world " + world.getName()
+                    + ": expected peaceful, easy, normal, or hard, but got " + value);
+            return false;
+        }
+
+        try {
+            Difficulty difficulty = Difficulty.valueOf(configuredDifficulty.trim().toUpperCase(Locale.ROOT));
+            world.setDifficulty(difficulty);
+            return true;
+        } catch (IllegalArgumentException e) {
+            getLogger().warning("Invalid difficulty for world " + world.getName() + ": " + configuredDifficulty
+                    + ". Expected peaceful, easy, normal, or hard.");
+            return false;
+        }
     }
 
     private void cacheConfiguration() {
