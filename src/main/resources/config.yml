@@ -6,6 +6,7 @@
 
 worlds:
   '*':
+    difficulty: normal
     show_advancement_messages: false
     show_death_messages: false
     random_tick_speed: 0
